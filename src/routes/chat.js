@@ -1,5 +1,5 @@
 const express = require('express');
-const { generateSQL } = require('../services/ollamaService');
+const { generateSQL } = require('../services/llmService');
 const { executeQuery } = require('../services/dbService');
 const { validateSQL } = require('../utils/validateQuery');
 
@@ -16,10 +16,10 @@ router.post('/chat', async (req, res) => {
   try {
     sql = await generateSQL(question.trim());
   } catch (err) {
-    console.error('[Ollama]', err.message);
+    console.error('[LM Studio]', err.message);
     return res.status(503).json({
-      error: 'Não foi possível conectar ao Ollama. Verifique se está rodando em ' +
-             (process.env.OLLAMA_URL || 'http://localhost:11434'),
+      error: 'Não foi possível conectar ao LM Studio. Verifique se o servidor local está ativo em ' +
+             (process.env.LM_STUDIO_URL || 'http://localhost:1234'),
     });
   }
 

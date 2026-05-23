@@ -13,7 +13,7 @@ app.use('/api', chatRouter);
 
 app.listen(PORT, () => {
   console.log(`Chatbot de Vendas rodando em http://localhost:${PORT}`);
-  console.log(`Ollama: ${process.env.OLLAMA_URL || 'http://localhost:11434'} | Modelo: ${process.env.OLLAMA_MODEL || 'sqlcoder:7b'}`);
+  console.log(`LM Studio: ${process.env.LM_STUDIO_URL || 'http://localhost:1234'} | Modelo: ${process.env.LM_STUDIO_MODEL || 'local-model'}`);
 });
 
 module.exports = app;
