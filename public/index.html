@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chatbot de Vendas</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    header .dot { width: 10px; height: 10px; border-radius: 50%; background: #4ade80; }
+    header h1 { font-size: 1rem; font-weight: 600; }
+    header span { font-size: .75rem; color: #94a3b8; margin-left: auto; }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .msg { display: flex; flex-direction: column; max-width: 80%; }
+    .msg.user { align-self: flex-end; align-items: flex-end; }
+    .msg.bot  { align-self: flex-start; align-items: flex-start; }
+
+    .bubble {
+      padding: 10px 14px;
+      border-radius: 16px;
+      line-height: 1.5;
+      font-size: .9rem;
+      word-break: break-word;
+    }
+    .msg.user .bubble { background: #3b82f6; color: #fff; border-bottom-right-radius: 4px; }
+    .msg.bot  .bubble { background: #fff; color: #1e293b; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .msg.bot  .bubble.error { background: #fee2e2; color: #991b1b; }
+
+    details.sql-box {
+      margin-top: 6px;
+      font-size: .8rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    details.sql-box summary {
+      cursor: pointer;
+      padding: 5px 10px;
+      color: #64748b;
+      user-select: none;
+    }
+    details.sql-box pre {
+      padding: 8px 12px;
+      background: #1e293b;
+      color: #7dd3fc;
+      font-size: .78rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+
+    .result-table-wrap { margin-top: 8px; overflow-x: auto; max-width: 520px; }
+    table { border-collapse: collapse; font-size: .82rem; width: 100%; }
+    th { background: #1e293b; color: #e2e8f0; padding: 6px 10px; text-align: left; white-space: nowrap; }
+    td { padding: 5px 10px; border-bottom: 1px solid #e2e8f0; color: #334155; white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #f8fafc; }
+
+    .count-label { margin-top: 4px; font-size: .75rem; color: #64748b; }
+
+    .typing { display: flex; gap: 4px; padding: 12px 14px; }
+    .typing span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #94a3b8; animation: blink 1.2s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: .2s; }
+    .typing span:nth-child(3) { animation-delay: .4s; }
+    @keyframes blink { 0%,80%,100%{opacity:.2} 40%{opacity:1} }
+
+    #input-area {
+      padding: 12px 16px;
+      background: #fff;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      gap: 8px;
+    }
+    #input-area input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 24px;
+      font-size: .9rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    #input-area input:focus { border-color: #3b82f6; }
+    #input-area button {
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      width: 40px; height: 40px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .2s;
+    }
+    #input-area button:hover { background: #2563eb; }
+    #input-area button:disabled { background: #93c5fd; cursor: not-allowed; }
+
+    .suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .suggestions button {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      border-radius: 14px;
+      padding: 4px 10px;
+      font-size: .78rem;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .suggestions button:hover { background: #dbeafe; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="dot"></div>
+  <h1>Chatbot de Vendas</h1>
+  <span>SQLCoder via Ollama</span>
+</header>
+
+<div id="messages">
+  <div class="msg bot">
+    <div class="bubble">
+      Olá! Faça perguntas sobre sua base de vendas em linguagem natural.<br>
+      Exemplos abaixo:
+    </div>
+    <div class="suggestions">
+      <button onclick="ask(this.textContent)">Quanto vendi na última hora?</button>
+      <button onclick="ask(this.textContent)">Top 5 produtos mais vendidos</button>
+      <button onclick="ask(this.textContent)">Pedidos pendentes de hoje</button>
+      <button onclick="ask(this.textContent)">Total de vendas por vendedor este mês</button>
+    </div>
+  </div>
+</div>
+
+<div id="input-area">
+  <input id="question" type="text" placeholder="Ex: Quanto vendi hoje?" autocomplete="off">
+  <button id="send-btn" onclick="sendMessage()" title="Enviar">&#9658;</button>
+</div>
+
+<script>
+  const messagesEl = document.getElementById('messages');
+  const inputEl = document.getElementById('question');
+  const sendBtn = document.getElementById('send-btn');
+
+  inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+
+  function ask(text) {
+    inputEl.value = text;
+    sendMessage();
+  }
+
+  function sendMessage() {
+    const q = inputEl.value.trim();
+    if (!q) return;
+    inputEl.value = '';
+    appendUserMsg(q);
+    fetchAnswer(q);
+  }
+
+  function appendUserMsg(text) {
+    const div = document.createElement('div');
+    div.className = 'msg user';
+    div.innerHTML = `<div class="bubble">${escHtml(text)}</div>`;
+    messagesEl.appendChild(div);
+    scrollBottom();
+  }
+
+  function showTyping() {
+    const div = document.createElement('div');
+    div.className = 'msg bot';
+    div.id = 'typing-indicator';
+    div.innerHTML = `<div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+    messagesEl.appendChild(div);
+    scrollBottom();
+  }
+
+  function removeTyping() {
+    document.getElementById('typing-indicator')?.remove();
+  }
+
+  async function fetchAnswer(question) {
+    sendBtn.disabled = true;
+    showTyping();
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+      removeTyping();
+
+      if (data.error) {
+        appendBotError(data.error, data.sql);
+      } else {
+        appendBotResult(data);
+      }
+    } catch (err) {
+      removeTyping();
+      appendBotError('Erro de comunicação com o servidor.');
+    } finally {
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+  }
+
+  function appendBotResult({ sql, rows, count }) {
+    const div = document.createElement('div');
+    div.className = 'msg bot';
+
+    let html = '';
+
+    if (count === 0) {
+      html += `<div class="bubble">Nenhum resultado encontrado.</div>`;
+    } else if (count === 1 && Object.keys(rows[0]).length === 1) {
+      const val = Object.values(rows[0])[0];
+      const label = Object.keys(rows[0])[0];
+      html += `<div class="bubble"><strong>${formatValue(val)}</strong><br><small>${label}</small></div>`;
+    } else {
+      html += `<div class="bubble">${buildTable(rows)}</div>`;
+    }
+
+    html += `
+      <details class="sql-box">
+        <summary>Ver SQL gerado</summary>
+        <pre>${escHtml(sql)}</pre>
+      </details>
+      <span class="count-label">${count} linha${count !== 1 ? 's' : ''}</span>
+    `;
+
+    div.innerHTML = html;
+    messagesEl.appendChild(div);
+    scrollBottom();
+  }
+
+  function appendBotError(msg, sql) {
+    const div = document.createElement('div');
+    div.className = 'msg bot';
+    let html = `<div class="bubble error">${escHtml(msg)}</div>`;
+    if (sql) {
+      html += `
+        <details class="sql-box">
+          <summary>SQL tentado</summary>
+          <pre>${escHtml(sql)}</pre>
+        </details>`;
+    }
+    div.innerHTML = html;
+    messagesEl.appendChild(div);
+    scrollBottom();
+  }
+
+  function buildTable(rows) {
+    const cols = Object.keys(rows[0]);
+    let t = '<div class="result-table-wrap"><table>';
+    t += '<thead><tr>' + cols.map(c => `<th>${escHtml(c)}</th>`).join('') + '</tr></thead>';
+    t += '<tbody>';
+    rows.forEach(row => {
+      t += '<tr>' + cols.map(c => `<td>${escHtml(formatValue(row[c]))}</td>`).join('') + '</tr>';
+    });
+    t += '</tbody></table></div>';
+    return t;
+  }
+
+  function formatValue(v) {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'number') return v.toLocaleString('pt-BR');
+    if (v instanceof Date) return v.toLocaleString('pt-BR');
+    return String(v);
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function scrollBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+</script>
+</body>
+</html>
