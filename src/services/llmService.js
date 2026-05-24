@@ -63,6 +63,9 @@ async function generateSQL(question) {
     };
   }
 
+  console.log('[LM Studio] →', url);
+  console.log('[LM Studio] request body:', JSON.stringify(body, null, 2));
+
   const response = await fetch(url, {
     method: 'POST',
     headers,
@@ -72,10 +75,12 @@ async function generateSQL(question) {
 
   if (!response.ok) {
     const text = await response.text();
+    console.error('[LM Studio] ← erro', response.status, text);
     throw new Error(`LM Studio ${response.status}: ${text}`);
   }
 
   const data = await response.json();
+  console.log('[LM Studio] ← response body:', JSON.stringify(data, null, 2));
 
   let raw;
   if (LM_STUDIO_MODE === 'chat') {
