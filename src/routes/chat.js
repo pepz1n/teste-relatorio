@@ -1,5 +1,5 @@
 const express = require('express');
-const { generateSQL } = require('../services/llmService');
+const { generateSQL, checkLMStudio } = require('../services/llmService');
 const { executeQuery } = require('../services/dbService');
 const { validateSQL } = require('../utils/validateQuery');
 
@@ -37,6 +37,11 @@ router.post('/chat', async (req, res) => {
   }
 
   res.json({ question, sql, rows, count: rows.length });
+});
+
+router.get('/status', async (req, res) => {
+  const result = await checkLMStudio();
+  res.status(result.ok ? 200 : 503).json(result);
 });
 
 module.exports = router;

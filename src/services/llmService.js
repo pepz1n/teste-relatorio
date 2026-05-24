@@ -2,10 +2,11 @@ const { DDL } = require('../schema/vendas');
 
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
 const LM_STUDIO_MODEL = process.env.LM_STUDIO_MODEL || 'local-model';
+const LM_STUDIO_API_KEY = process.env.LM_STUDIO_API_KEY || 'lm-studio';
+// 'completion' para SQLCoder e modelos base; 'chat' para modelos de instrução (Mistral, Llama, etc.)
+const LM_STUDIO_MODE = process.env.LM_STUDIO_MODE || 'completion';
 
-// SQLCoder é um modelo de completion — /v1/completions preserva o prompt exato
-// como foi treinado e dá resultados melhores que chat/completions
-function buildPrompt(question) {
+function buildCompletionPrompt(question) {
   return `### Task
 Generate a SQL query to answer [QUESTION]${question}[/QUESTION]
 
@@ -19,20 +20,53 @@ Given the database schema, here is the SQL query that answers [QUESTION]${questi
 `;
 }
 
-async function generateSQL(question) {
-  const response = await fetch(`${LM_STUDIO_URL}/v1/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.LM_STUDIO_API_KEY || 'lm-studio'}`,
+function buildChatMessages(question) {
+  return [
+    {
+      role: 'system',
+      content: `You are a SQL expert. Generate only a valid PostgreSQL SELECT query based on the user's question and the schema below. Return only the SQL query, no explanation, no markdown fences.
+
+Database schema:
+${DDL}`,
     },
-    body: JSON.stringify({
+    {
+      role: 'user',
+      content: question,
+    },
+  ];
+}
+
+async function generateSQL(question) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${LM_STUDIO_API_KEY}`,
+  };
+
+  let url, body;
+
+  if (LM_STUDIO_MODE === 'chat') {
+    url = `${LM_STUDIO_URL}/v1/chat/completions`;
+    body = {
       model: LM_STUDIO_MODEL,
-      prompt: buildPrompt(question),
+      messages: buildChatMessages(question),
+      max_tokens: 512,
+      temperature: 0,
+    };
+  } else {
+    url = `${LM_STUDIO_URL}/v1/completions`;
+    body = {
+      model: LM_STUDIO_MODEL,
+      prompt: buildCompletionPrompt(question),
       max_tokens: 512,
       temperature: 0,
       stop: ['[/SQL]', '\n\n\n\n'],
-    }),
+    };
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(90_000),
   });
 
@@ -42,18 +76,39 @@ async function generateSQL(question) {
   }
 
   const data = await response.json();
-  const raw = data.choices?.[0]?.text || '';
+
+  let raw;
+  if (LM_STUDIO_MODE === 'chat') {
+    raw = data.choices?.[0]?.message?.content || '';
+  } else {
+    raw = data.choices?.[0]?.text || '';
+  }
+
   return extractSQL(raw);
 }
 
 function extractSQL(raw) {
-  let sql = raw
+  return raw
     .replace(/^\[SQL\]/i, '')
     .replace(/```sql\n?/gi, '')
     .replace(/```/g, '')
     .split(';')[0]
     .trim();
-  return sql;
 }
 
-module.exports = { generateSQL };
+async function checkLMStudio() {
+  try {
+    const response = await fetch(`${LM_STUDIO_URL}/v1/models`, {
+      headers: { 'Authorization': `Bearer ${LM_STUDIO_API_KEY}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
+    const data = await response.json();
+    const models = data.data?.map(m => m.id) || [];
+    return { ok: true, url: LM_STUDIO_URL, model: LM_STUDIO_MODEL, mode: LM_STUDIO_MODE, models };
+  } catch (err) {
+    return { ok: false, url: LM_STUDIO_URL, error: err.message };
+  }
+}
+
+module.exports = { generateSQL, checkLMStudio };
